@@ -1,69 +1,5 @@
-#include "cnrt.h"
-#include "cnml.h"
 #include <iostream>
 #include <sstream>
-
-void TestCast() {
-  cnrtInit(0);
-  cnrtDev_t dev;
-  cnrtGetDeviceHandle(&dev, 0);
-  cnrtSetCurrentDevice(dev);
-  const cnmlCoreVersion_t core_version = CNML_MLU270;
-  const int core_num = 4;
-  const int dim_num = 4;
-  const int n = 1, c = 3, h = 224, w = 224;
-  const int data_size = n * c * h * w;
-  int shape[] = {n, c, h, w};
-
-  float* input_cpu_ptr = new float[data_size];
-  int16_t* output_cpu_ptr = new int16_t[data_size];
-  for (int i = 0; i < data_size; ++i) {
-    input_cpu_ptr[i] = i;
-  }
-
-  cnmlTensor_t input_tensor = nullptr;
-  cnmlCreateTensor_V2(&input_tensor, CNML_TENSOR);
-  cnmlSetTensorShape_V2(input_tensor, dim_num, shape, nullptr);
-  cnmlSetTensorDataType(input_tensor, CNML_DATA_FLOAT32);
-
-  cnmlTensor_t output_tensor = nullptr;
-  cnmlCreateTensor_V2(&output_tensor, CNML_TENSOR);
-  cnmlSetTensorShape_V2(output_tensor, dim_num, shape, nullptr);
-  cnmlSetTensorDataType(output_tensor, CNML_DATA_FLOAT16);
-
-  cnmlBaseOp_t cast_op;
-  cnmlCreateCastOp(&cast_op, CNML_CAST_FLOAT32_TO_FLOAT16, input_tensor, output_tensor);
-  cnmlSetBaseOpCorenum(cast_op, core_num);
-  cnmlSetBaseOpCoreVersion(cast_op, core_version);
-  cnmlCompileBaseOp_V2(cast_op);
-
-  void* input_mlu_ptr = nullptr;
-  void* output_mlu_ptr = nullptr;
-  cnrtMalloc(&input_mlu_ptr, data_size * sizeof(float));
-  cnrtMalloc(&output_mlu_ptr, data_size * sizeof(int16_t));
-  cnrtMemcpy(input_mlu_ptr, input_cpu_ptr, data_size * sizeof(float), CNRT_MEM_TRANS_DIR_HOST2DEV);
-
-  cnrtQueue_t q;
-  cnrtCreateQueue(&q);
-  cnrtInvokeFuncParam_t forward_param;
-  int data_param = 1;
-  forward_param.data_parallelism = &data_param;
-  u32_t affinity = 0x01;
-  forward_param.affinity = &affinity;
-  forward_param.end = CNRT_PARAM_END;
-  cnmlComputeCastOpForward_V3(cast_op, input_mlu_ptr, output_mlu_ptr, &forward_param, q);
-  cnrtSyncQueue(q);
-
-  cnrtMemcpy(output_cpu_ptr, output_mlu_ptr, data_size * sizeof(int16_t), CNRT_MEM_TRANS_DIR_DEV2HOST);
-
-  cnmlDestroyBaseOp(&cast_op);
-  cnrtFree(input_mlu_ptr);
-  cnrtFree(output_mlu_ptr);
-  cnmlDestroyTensor(&input_tensor);
-  cnmlDestroyTensor(&output_tensor);
-  delete[] input_cpu_ptr;
-  delete[] output_cpu_ptr;
-}
 
 #include "batcher.h"
 template <typename T>
@@ -298,7 +234,6 @@ void TestFunctional() {
 };
 
 int main(int argc, char** argv) {
-  TestCast();
   /* TestBatcher(); */
   TestSmartPtr();
   TestPrintPtr();
