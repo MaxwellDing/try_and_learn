@@ -1,5 +1,6 @@
 #include <iostream>
 #include <sstream>
+#include <cstdlib>
 
 #include "batcher.h"
 template <typename T>
@@ -42,6 +43,11 @@ void TestBatcher() {
 
 void TestSmartPtr() {
   ItemContainer ic;
+
+  auto m = std::shared_ptr<void>(malloc(400), [](void* ptr) {free(ptr);});
+  char* a = static_cast<char*>(m.get());
+  snprintf(a, 100, "test shared_ptr<void>");
+  std::cout << a << std::endl;
 }
 
 void TestPrintPtr() {
@@ -198,12 +204,38 @@ void TestCurl() {
   /* std::cout << "download file in: " << d.Download(wrong_url) << std::endl; */
 }
 
+/*
+template <typename... Args>
+class ClassWithArgs {
+ public:
+  using ProcessFunc = std::function<void(Args...)>;
+  ClassWithArgs(const ProcessFunc& func) : func_(func) {}
+  void operator()(Args&&... args) {
+    func_(std::forward<Args>(args)...);
+  };
+
+ private:
+  ProcessFunc func_;
+};
+
+void EmptyFunction(int a, const std::string& str) {
+  std::cout << a << ": " << str << "\n";
+}
+
+void TestEmit(int a, const std::string& str) {
+  ClassWithArgs<int, const std::string&> temp_class(&EmptyFunction);
+  temp_class(a, str);
+}
+*/
+
 #include "temp.h"
 void TestTemp() {
   aContainer a;
   int i_a;
   a.PrintTypeAddress(i_a);
   PrintIntTypeAddress();
+
+  /* TestEmit(2, "some string"); */
 }
 
 #include <functional>
@@ -233,6 +265,200 @@ void TestFunctional() {
   std::cout << "copy func\n";
 };
 
+#include <queue>
+void TestPriorityQueue() {
+  std::priority_queue<OneItem, std::deque<OneItem>> q;
+  q.emplace(0, 0);
+  std::cout << "@@@@@@@@@@@@@@@@@@@@ push 0 0\n";
+  q.emplace(1, 1);
+  std::cout << "@@@@@@@@@@@@@@@@@@@@ push 1 1\n";
+  q.emplace(0, 2);
+  std::cout << "@@@@@@@@@@@@@@@@@@@@ push 0 2\n";
+  q.emplace(0, 3);
+  std::cout << "@@@@@@@@@@@@@@@@@@@@ push 0 3\n";
+  q.emplace(1, 4);
+  std::cout << "@@@@@@@@@@@@@@@@@@@@ push 1 4\n";
+  q.emplace(2, 5);
+  std::cout << "@@@@@@@@@@@@@@@@@@@@ push 2 5\n";
+  q.emplace(1, 6);
+  std::cout << "@@@@@@@@@@@@@@@@@@@@ push 1 6\n";
+
+  std::cout << "@@@@@@@@@@@@@@@@@@@@ test priority queue\n";
+  while (!q.empty()) {
+    auto item = q.top();
+    std::cout << item.priority << "\t" << item.sequence << "\n";
+    q.pop();
+  }
+  std::cout << "@@@@@@@@@@@@@@@@@@@@ end\n";
+}
+
+void DoThrow() {
+  throw std::runtime_error("some exception");
+}
+
+void TestNoexcept() noexcept {
+  try {
+    DoThrow();
+  } catch(...) {
+  }
+}
+
+#include <map>
+void TestMap() {
+  std::map<std::string, std::string> m;
+  m["test1"] = "test 1";
+  m["test2"] = "test 2";
+  try {
+    std::cout << m.at("test3") << "\n";
+  } catch (std::exception& e) {
+    std::cerr << e.what() << "\n";
+  }
+}
+
+void TestPrintf() {
+  printf("%-16s END %-16s\n", "test", "");
+};
+
+class NoMove {
+ public:
+  NoMove() = default;
+  NoMove(const NoMove&) = default;
+  NoMove& operator=(const NoMove&) = default;
+  NoMove(NoMove&&) = delete;
+  NoMove& operator=(NoMove&&) = delete;
+};
+
+void TestMoveAny() {
+  NoMove a;
+  any contain = a;
+  std::cout << std::boolalpha << std::is_move_constructible<decltype(contain)>::value << std::endl;
+  /* any another = std::move(contain); */
+}
+
+void RrefParamFunc(OneItem&& item) {
+}
+
+void TestRrefParam() {
+  OneItem item;
+  // compile error
+  /* RrefParamFunc(item); */
+  RrefParamFunc(OneItem());
+}
+
+void TestBit() {
+  std::cout << "test bit\n";
+  int num_1 = 1023;
+  std::cout << (num_1 & 1) << std::endl;
+  std::cout << (num_1 | 1024) << std::endl;
+  std::cout << (num_1 | 1023) << std::endl;
+  std::cout << (num_1 & num_1 + 1) << std::endl;
+
+  int64_t e = -5;
+  int64_t i1 = int64_t(1) << 56;
+  int64_t i2 = int64_t(2) << 56;
+  std::cout << i1 + e << std::endl;
+  std::cout << 2 * (i1 + e) << std::endl;
+  std::cout << i2 + e << std::endl;
+}
+
+#ifndef __linux__
+#include "windows.h"
+#else
+
+#include "unistd.h"
+#include "sys/sysinfo.h"
+#endif
+
+void TestGetProcessorNumber() {
+#ifndef __linux__
+SYSTEM_INFO sysInfo;
+GetSystemInfo( &sysInfo );
+printf("system cpu num is %d\n", sysInfo.dwNumberOfProcessors);
+#else
+
+printf("system cpu num is %d \n", sysconf(_SC_NPROCESSORS_CONF));
+printf("system enable num is %d\n", sysconf(_SC_NPROCESSORS_ONLN));
+
+//GNU way
+printf("system cpu num is %d\n", get_nprocs_conf());
+printf("system enable num is %d\n", get_nprocs());
+#endif
+}
+
+/*
+template <typename... Args>
+void ArgsFunc(Args&&... args, int major, int64_t minor = 0) {
+}
+
+void TestArgsFunc() {
+  ArgsFunc("seg", 124, 2351, 123);
+  ArgsFunc("seg", "sdf", 2351, 123, 125);
+}
+*/
+
+#include <limits>
+void TestBigNumber() {
+  std::cout << std::numeric_limits<uint32_t>::max() - 1 << std::endl;
+  std::cout << std::numeric_limits<uint32_t>::max() + 1 << std::endl;
+  std::cout << std::numeric_limits<uint32_t>::min() - 1 << std::endl;
+}
+
+void TestQueue() {
+  std::queue<int> q;
+  // segment fault
+  /* std::cout << q.back() << "\n"; */
+}
+
+void SlotFunc(int a, const std::string& b) {
+}
+
+#include "sigslot.h"
+class SignalClass {
+ public:
+  void EmitSignal(int&& a, const std::string& b) {
+    emit sig_a(std::move(a), b);
+  }
+ signals:
+  Signal<int&&, const std::string&> sig_a;
+};
+
+void TestSigSlot() {
+  SignalClass sig_c;
+  connect_sync(&sig_c, sig_a, SlotFunc);
+  sig_c.EmitSignal(5, "test signal slot");
+}
+
+class DestructorCatch {
+ public:
+  ~DestructorCatch() {
+    try {
+    } catch(...) {
+      std::cout << "catch exception\n";
+    }
+  }
+};
+
+void TestCatch() {
+  DestructorCatch c;
+  throw std::runtime_error("some error");
+}
+
+void TestVector() {
+  float* a = new float[10];
+  a[0] = 0;
+  a[1] = 1;
+  a[2] = 2;
+  std::vector<float> v_a(a, a + 9);
+  a[0] = 0;
+  a[1] = 0;
+  a[2] = 0;
+  delete[] a;
+  for (auto& it : v_a) {
+    std::cout << it << ", ";
+  }
+  std::cout << std::endl;
+}
+
 int main(int argc, char** argv) {
   /* TestBatcher(); */
   TestSmartPtr();
@@ -243,5 +469,19 @@ int main(int argc, char** argv) {
   TestCurl();
   TestTemp();
   TestFunctional();
+  TestPriorityQueue();
+  TestNoexcept();
+  TestMap();
+  TestPrintf();
+  TestMoveAny();
+  TestRrefParam();
+  TestBit();
+  TestGetProcessorNumber();
+  /* TestArgsFunc(); */
+  TestBigNumber();
+  TestQueue();
+  TestSigSlot();
+  /* TestCatch(); */
+  TestVector();
   return 0;
 }
