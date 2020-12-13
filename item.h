@@ -46,6 +46,11 @@ class OneItem {
     return lhs.priority < rhs.priority;
   }
 
+  friend std::ostream& operator<<(std::ostream& os, const OneItem& item) {
+    os << item.data;
+    return os;
+  }
+
   std::string data;
   int priority;
   int sequence;

@@ -39,15 +39,22 @@ void TestBatcher() {
   bi.AddItem(8);
 }
 
-#include "item_container.h"
+#include "thing_container.h"
+
+class TestA {};
+class TestB : public TestA {};
 
 void TestSmartPtr() {
-  ItemContainer ic;
+  ThingContainer ic;
 
   auto m = std::shared_ptr<void>(malloc(400), [](void* ptr) {free(ptr);});
   char* a = static_cast<char*>(m.get());
   snprintf(a, 100, "test shared_ptr<void>");
   std::cout << a << std::endl;
+
+  std::shared_ptr<TestB> b_p = std::make_shared<TestB>();
+  std::shared_ptr<TestA> a_p = b_p;
+  std::cout << "derived sptr == base sptr? : " << std::boolalpha << (a_p == b_p) << std::endl;
 }
 
 void TestPrintPtr() {
@@ -91,9 +98,18 @@ void TestAny() {
   std::cout << "i1: " << i1.data << "\n";
   std::cout << "i2: " << i2.data << "\n";
 
+  std::cout << "################copy any\n";
+  any to1;
+  to1 = aitem;
+  std::cout << "################end copy any\n";
+
   std::cout << "---------------\n";
   auto& lref = any_cast<OneItem&>(aitem);
   std::cout << "---------------\n";
+  std::cout << "################move any\n";
+  any to2;
+  to2 = std::move(aitem);
+  std::cout << "################end move any\n";
 }
 
 #include <unistd.h>
@@ -359,6 +375,7 @@ void TestBit() {
   std::cout << i1 + e << std::endl;
   std::cout << 2 * (i1 + e) << std::endl;
   std::cout << i2 + e << std::endl;
+  std::cout << "test bit end\n";
 }
 
 #ifndef __linux__
@@ -415,16 +432,16 @@ void SlotFunc(int a, const std::string& b) {
 #include "sigslot.h"
 class SignalClass {
  public:
-  void EmitSignal(int&& a, const std::string& b) {
-    emit sig_a(std::move(a), b);
+  void EmitSignal(int a, const std::string& b) {
+    emit sig_a(a, b);
   }
  signals:
-  Signal<int&&, const std::string&> sig_a;
+  Signal<SignalPolicy::SYNC, int, const std::string&> sig_a;
 };
 
 void TestSigSlot() {
   SignalClass sig_c;
-  connect_sync(&sig_c, sig_a, SlotFunc);
+  connect(&sig_c, sig_a, SlotFunc);
   sig_c.EmitSignal(5, "test signal slot");
 }
 
@@ -452,11 +469,206 @@ void TestVector() {
   a[0] = 0;
   a[1] = 0;
   a[2] = 0;
+  for (auto& it : v_a) {
+    std::cout << it << ", ";
+  }
+  std::cout << std::endl;
   delete[] a;
   for (auto& it : v_a) {
     std::cout << it << ", ";
   }
   std::cout << std::endl;
+}
+
+void TestAtomic() {
+  std::vector<std::thread> ths;
+  std::atomic<bool> flag(false);
+  /* flag.store(false, std::memory_order_release); */
+  int thread_num = 10;
+  ths.reserve(thread_num);
+  for (int i = 0; i < thread_num; ++i) {
+    ths.emplace_back([&flag](){
+      int time = 100;
+      int count = 0;
+      bool f;
+      while (time--) {
+        f = flag.load(std::memory_order_acquire);
+        if (!f) {
+          f = true;
+        }
+        std::cout << "a" << "b" << "c" << std::endl;
+        if (count++ == 8) {
+          count = 0;
+          f = false;
+        }
+        flag.store(f, std::memory_order_release);
+      }
+    });
+  }
+  for (size_t i = 0; i < ths.size(); ++i) {
+    ths[i].join();
+  }
+}
+
+struct AnyContainer {
+  template <typename T>
+  void Set(T&& v) {
+    a = std::forward<T>(v);
+  }
+
+  template <typename T>
+  typename std::remove_reference<T>::type Get() const {
+    return any_cast<typename std::remove_reference<T>::type>(a);
+  }
+
+  template <typename T>
+  typename std::add_lvalue_reference<T>::type GetLref() & {
+    return any_cast<typename std::add_lvalue_reference<T>::type>(a);
+  }
+
+  any a;
+};
+
+void TestAnyContainer() {
+  AnyContainer c;
+  /* std::string str("test"); */
+  /* c.Set(str); */
+  c.Set(OneItem());
+  std::cout << "@@@@@@@@@@@\n";
+  auto& a = c.GetLref<OneItem>();
+  std::cout << "@@@@@@@@@@@\n";
+
+  /* const auto& cc = c; */
+  /* std::string s = cc.Get<std::string>(); */
+  /* s = cc.Get<std::string&>(); */
+  /* s.erase(0); */
+  /* std::cout << cc.Get<std::string>() << std::endl; */
+  /* s = cc.Get<std::string&&>(); */
+}
+
+template <int T>
+struct TraitsBase {
+  static constexpr const char* type = "unknown";
+};
+
+template <>
+struct TraitsBase<1> {
+  static constexpr const char* type = "int";
+};
+
+template <>
+struct TraitsBase<2> {
+  static constexpr const char* type = "float";
+};
+
+constexpr const char* GetTraitsName(const int i) {
+  return i == 1 ? TraitsBase<1>::type : (i == 2 ? TraitsBase<2>::type : TraitsBase<0>::type);
+}
+
+void TestConstexpr() {
+  int a = 1;
+  std::cout << GetTraitsName(a) << std::endl;
+}
+
+inline void RealFunc(OneItem item) {
+}
+
+inline void InlineFunc(OneItem&& item) {
+  return RealFunc(std::forward<OneItem>(item));
+  /* std::cout << item.data << std::endl; */
+}
+
+class TestInlineReturn {
+ public:
+  OneItem GetItem() { return item_; }
+
+ private:
+  OneItem item_;
+};
+
+void TestInline() {
+  OneItem item;
+  item.data = "test inline";
+  std::cout << "test inline begin\n";
+  InlineFunc(std::move(item));
+  std::cout << "test inline end\n";
+
+  TestInlineReturn t;
+  std::cout << "test inline return\n";
+  std::cout << t.GetItem() << std::endl;
+  std::cout << t.GetItem().data << std::endl;
+  std::cout << "test inline return end\n";
+}
+
+void TestFuture() {
+  std::promise<int> p;
+  auto f = p.get_future();
+  std::cout << "before move] future valid: " << f.valid() << std::endl;
+  auto f_m = std::move(f);
+  std::cout << "after move] future valid: " << f.valid() << std::endl;
+  std::cout << "after move] new future valid: " << f_m.valid() << std::endl;
+  p.set_value(1);
+  std::cout << "after set value] new future valid: " << f_m.valid() << std::endl;
+  f_m.get();
+  std::cout << "after get] new future valid: " << f_m.valid() << std::endl;
+}
+
+class CrtpBase {
+ public:
+  explicit CrtpBase(const std::string& name) : name_(name) {}
+  virtual void PrintName() = 0;
+  const std::string& Name() {
+    return name_;
+  }
+ private:
+  std::string name_;
+};
+
+template <typename T>
+class Crtp : public CrtpBase {
+ public:
+  explicit Crtp(const std::string& name) : CrtpBase(name) {}
+  void PrintName() {
+    std::cout << static_cast<T*>(this)->GetSpecialName() << std::endl;
+  }
+};
+
+class DerivedCrtp : public Crtp<DerivedCrtp> {
+ public:
+  explicit DerivedCrtp(const std::string& name) : Crtp(name) {}
+  const std::string& GetSpecialName() {
+    return Name();
+  }
+};
+
+void TestCrtp() {
+  DerivedCrtp instance("derived");
+  CrtpBase* p = &instance;
+  p->PrintName();
+}
+
+#include "unistd.h"
+#define PATH_MAX_LENGTH 1024
+void TestGetPath() {
+  char path[PATH_MAX_LENGTH];
+  int cnt = readlink("/proc/self/exe", path, PATH_MAX_LENGTH);
+  if (cnt < 0 || cnt >= PATH_MAX_LENGTH) {
+    std::cout << "read link error!!!!!";
+  }
+  path[cnt] = '$';
+  std::cout << "origin: " << path << std::endl;
+  path[cnt] = '\0';
+  std::string result(path);
+  std::string subfix = "build/";
+  std::string res = result.substr(0, result.find_last_of('/') + 1);
+  std::string res_tail = res.substr(res.size() - subfix.size(), res.size());
+  std::cout << "subfix: " << subfix << std::endl;
+  std::cout << "res: " << res << std::endl;
+  std::cout << "res_tail: " << res_tail << std::endl;
+  if (res_tail == subfix) {
+    std::cout << "success\n";
+    /* res = res.substr(0, res.size() - subfix.size()); */
+  }
 }
 
 int main(int argc, char** argv) {
@@ -483,5 +695,12 @@ int main(int argc, char** argv) {
   TestSigSlot();
   /* TestCatch(); */
   TestVector();
+  /* TestAtomic(); */
+  TestAnyContainer();
+  TestConstexpr();
+  TestInline();
+  TestFuture();
+  TestCrtp();
+  TestGetPath();
   return 0;
 }

@@ -16,7 +16,7 @@ libs = [thread_dep, curl_dep, foo_dep]
 
 incs = include_directories('/usr/include')
 
-src = ['main.cpp', 'item_container.cpp']
+src = ['main.cpp', 'thing_container.cpp']
 executable('demo',
            sources : src,
            include_directories : incs,

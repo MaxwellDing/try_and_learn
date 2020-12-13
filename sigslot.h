@@ -9,94 +9,82 @@
 
 #include "thread_pool.h"
 
-#define STRINGIFY(obj) #obj
 #define emit
-#define slots
 #define signals public
-#define connect_sync(sender, signal, slot) ((sender)->signal.Bind<SignalPolicy::SYNC>(slot))
-#define connect_async(sender, signal, slot) ((sender)->signal.Bind<SignalPolicy::ASYNC>(slot))
-
-inline std::string Stringify(void* ptr) {
-  thread_local std::ostringstream ss;
-  ss << ptr;
-  return ss.str();
-}
+#define connect(sender, signal, slot) ((sender)->signal.Bind(slot))
 
 enum class SignalPolicy {
   SYNC,
   ASYNC
 };
 
-template <typename... Args>
+template <typename Derived>
 class SlotBase {
  public:
-  virtual void Exec(Args&&... args) = 0;
-  virtual ~SlotBase() {}
+  template <typename... RArgs>
+  void Run(RArgs&&... args) {
+    static_cast<Derived*>(this)->Exec(std::forward<RArgs>(args)...);
+  }
+  virtual ~SlotBase() = default;
 };
 
 template<SignalPolicy policy, typename... Args>
-class Slot : public SlotBase<Args...> {
+class Slot : public SlotBase<Slot<policy, Args...>> {
  public:
   using OnFunc = std::function<void(Args...)>;
+  Slot(OnFunc&& func) noexcept : func_(std::forward<OnFunc>(func)) {}
 
-  Slot(const OnFunc& func) : func_(func) {
-      // Do nothing
+  template <typename... RArgs, typename = std::result_of<OnFunc(RArgs...)>>
+  void Exec(RArgs&&... args) {
+    func_(std::forward<RArgs>(args)...);
   }
-
-  void Exec(Args&&... args) override;
 
  private:
   OnFunc func_;
 };
 
-template<SignalPolicy policy, typename... Args>
-void Slot<policy, Args...>::Exec(Args&&... args) {
-  func_(std::forward<Args>(args)...);
-}
-
 template<typename... Args>
-class Slot<SignalPolicy::ASYNC, Args...> : public SlotBase<Args...> {
+class Slot<SignalPolicy::ASYNC, Args...> : public SlotBase<Slot<SignalPolicy::ASYNC, Args...>> {
  public:
   using OnFunc = std::function<void(Args...)>;
-  Slot(const OnFunc& func) : func_(func) {
-    tp_.Resize(1);
+  Slot(const OnFunc& func) noexcept : func_(func) { tp_.Resize(1); }
+
+  template <typename... RArgs, typename = std::result_of<OnFunc(RArgs...)>>
+  void Exec(RArgs&&... args) {
+    tp_.VoidPush(0, func_, std::forward<RArgs>(args)...);
   }
 
-  void Exec(Args&&... args) override;
- 
  private:
   EqualityThreadPool tp_;
   OnFunc func_;
 };
 
-template<typename... Args>
-void Slot<SignalPolicy::ASYNC, Args...>::Exec(Args&&... args) {
-  tp_.VoidPush(0, func_, std::forward<Args>(args)...);
-}
-
-template<typename... Args>
+template<SignalPolicy policy, typename... Args>
 class Signal {
  public:
-  using SlotPtr = std::shared_ptr<SlotBase<Args...>>; 
+  using SlotPtr = std::shared_ptr<SlotBase<Slot<policy, Args...>>>;
   using OnFunc = std::function<void(Args...)>;
 
-  template <SignalPolicy policy>
   void Bind(OnFunc&& func) {
     slots_.push_back(SlotPtr(new Slot<policy, Args...>(std::forward<OnFunc>(func))));
   }
 
-  void operator()(Args&&... args);
+  template <typename... RArgs, typename = std::result_of<OnFunc(RArgs...)>>
+  void operator()(RArgs&&... args) {
+    for (auto& iter : slots_) {
+      iter->Run(std::forward<RArgs>(args)...);
+    }
+  }
 
  private:
   std::vector<SlotPtr> slots_;
 };
 
 template<typename... Args>
-void Signal<Args...>::operator()(Args&&... args) {
-  for (auto& iter : slots_) {
-    iter->Exec(std::forward<Args>(args)...);
-  }
-}
+using SyncSignal = Signal<SignalPolicy::SYNC, Args...>;
+
+template<typename... Args>
+using AsyncSignal = Signal<SignalPolicy::ASYNC, Args...>;
 
 #endif
 
