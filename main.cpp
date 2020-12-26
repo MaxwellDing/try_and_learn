@@ -671,6 +671,83 @@ void TestGetPath() {
   }
 }
 
+#define OFFSET(Type, member) (size_t)&(((Type*)0)->member)
+
+struct TestSize{
+  std::function<void(int, OneItem)> func;
+  OneItem item;
+  int64_t i64;
+  uint32_t u32;
+  std::atomic<int> number{0};
+  std::atomic<bool> flag_a{false};
+  std::atomic<bool> flag_b{false};
+};
+
+struct BBox {
+  float x;
+  float y;
+  float w;
+  float h;
+};
+
+struct Object1 {
+  int label;
+  float score;
+  BBox box;
+  int detect_id;
+  int track_id;
+  std::vector<float> feature;
+};
+
+struct Object2 {
+  BBox box;
+  int label;
+  float score;
+  int detect_id;
+  int track_id;
+  std::vector<float> feature;
+};
+
+void TestSizeOf() {
+  std::atomic<bool> a_b;
+  std::cout << "size of atomic<bool>: " << sizeof(a_b) << std::endl;
+  std::cout << "size of TestSize: " << sizeof(TestSize) << std::endl;
+  std::cout << "  size of function: " << sizeof(std::function<void(int, OneItem)>) << std::endl;
+  std::cout << "  size of item: " << sizeof(OneItem) << std::endl;
+  std::cout << "  size of number: " << sizeof(std::atomic<int>) << std::endl;
+  std::cout << "offset: " << OFFSET(TestSize, func)
+            << " " << OFFSET(TestSize, item)
+            << " " << OFFSET(TestSize, i64)
+            << " " << OFFSET(TestSize, u32)
+            << " " << OFFSET(TestSize, number)
+            << " " << OFFSET(TestSize, flag_a)
+            << " " << OFFSET(TestSize, flag_b)
+            << std::endl;
+  std::cout << "offset: " << offsetof(TestSize, func)
+            << " " << offsetof(TestSize, item)
+            << " " << offsetof(TestSize, i64)
+            << " " << offsetof(TestSize, u32)
+            << " " << offsetof(TestSize, number)
+            << " " << offsetof(TestSize, flag_a)
+            << " " << offsetof(TestSize, flag_b)
+            << std::endl;
+  TestSize a;
+  a.flag_a.store(true);
+  std::cout << "flag_a: " << a.flag_a.load() << std::endl;
+  a.flag_b.store(true);
+  std::cout << "flag_a: " << a.flag_a.load() << std::endl;
+
+  std::cout << "sizeof vector<float>: " << sizeof(std::vector<float>) << std::endl;
+  std::cout << "sizeof Object1: " << sizeof(Object1) << std::endl;
+  std::cout << "sizeof Object2: " << sizeof(Object2) << std::endl;
+}
+
+void TestMemFn() {
+  OneItem item;
+  auto access = std::mem_fn(&OneItem::data);
+  std::cout << access(&item) << std::endl;
+}
+
 int main(int argc, char** argv) {
   /* TestBatcher(); */
   TestSmartPtr();
@@ -702,5 +779,7 @@ int main(int argc, char** argv) {
   TestFuture();
   TestCrtp();
   TestGetPath();
+  TestSizeOf();
+  TestMemFn();
   return 0;
 }
