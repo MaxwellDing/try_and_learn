@@ -1,8 +1,8 @@
 project('test',
         ['cpp', 'c'],
-        default_options : ['cpp_std=c++11'])
+        default_options : ['cpp_std=c++17'])
 
-add_project_arguments('-fPIC', '-Wall', '-O3', language : 'cpp')
+add_project_arguments('-fPIC', language : 'cpp')
 
 cc = meson.get_compiler('cpp')
 
@@ -21,3 +21,11 @@ executable('demo',
            sources : src,
            include_directories : incs,
            dependencies : libs)
+
+
+benchmark_dep = dependency('benchmark')
+
+executable('mybenchmark',
+           sources : 'my_benchmark.cpp',
+           include_directories : incs,
+           dependencies : [benchmark_dep])
