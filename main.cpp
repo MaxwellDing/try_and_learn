@@ -461,6 +461,7 @@ void TestCatch() {
 }
 
 void TestVector() {
+  std::cout << "test vector" << std::endl;
   float* a = new float[10];
   a[0] = 0;
   a[1] = 1;
@@ -478,6 +479,8 @@ void TestVector() {
     std::cout << it << ", ";
   }
   std::cout << std::endl;
+
+  v_a.resize(0);
 }
 
 void TestAtomic() {
@@ -748,6 +751,19 @@ void TestMemFn() {
   std::cout << access(&item) << std::endl;
 }
 
+void PopFrom(std::priority_queue<OneItem>* q, OneItem* value) {
+  *value = std::move(const_cast<OneItem&>(q->top()));
+}
+
+void TestMoveLref() {
+  std::priority_queue<OneItem> q;
+  q.emplace();
+  OneItem item;
+  OneItem& item_ref = item;
+  std::cout << "before pop" << std::endl;
+  PopFrom(&q, &item_ref);
+  std::cout << "after pop" << std::endl;
+}
 int main(int argc, char** argv) {
   /* TestBatcher(); */
   TestSmartPtr();
@@ -781,5 +797,6 @@ int main(int argc, char** argv) {
   TestGetPath();
   TestSizeOf();
   TestMemFn();
+  TestMoveLref();
   return 0;
 }
